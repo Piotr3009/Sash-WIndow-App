@@ -1,0 +1,5 @@
+supabase==2.3.4
+openpyxl==3.1.2
+reportlab==4.0.9
+matplotlib==3.8.2
+python-dotenv==1.0.0
