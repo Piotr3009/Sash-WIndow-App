@@ -193,37 +193,170 @@ After calculating a window design, switch to the **Graphics** tab to access:
 
 ### CAD Export Features
 
-**DXF Export** (💾 Export DXF):
-- Industry-standard CAD format
-- Compatible with AutoCAD, LibreCAD, QCAD, and other CAD software
-- Proper layering: FRAME, SASH_TOP, SASH_BOTTOM, GLASS, BARS, DIMENSIONS, TEXT
-- Units: millimeters
-- Line weights: 0.15-0.50mm
-- DXF version: R2018
-- Includes metadata block with project information
+The application uses a **scene-based architecture** for professional CAD exports:
 
-**SVG Export** (🖼 Export SVG):
-- Scalable vector graphics format
-- Perfect for documentation, web pages, and print materials
-- Maintains full quality at any scale
-- Embedded metadata
-- Layer-based organization using SVG groups
-- Arrow markers for dimension lines
+1. **Build Scene**: Generate geometry from window data using `build_scene()`
+2. **Export**: Convert scene to DXF, SVG, or other formats
+3. **Threaded Execution**: Exports run in background threads (non-blocking GUI)
 
-**PNG Export** (📷 Export PNG):
-- High-resolution raster images (default 300 DPI)
-- Anti-aliased rendering for professional quality
-- Suitable for presentations, reports, and print
+#### DXF Export (💾 Export DXF)
+
+**Professional AutoCAD-compatible CAD files:**
+- **Format**: DXF R2018 (Modelspace only)
+- **Units**: Millimeters
+- **Coordinate System**: Bottom-left origin (CAD standard)
+- **Compatible with**: AutoCAD, LibreCAD, QCAD, DraftSight
+
+**Exact Layer Specifications** (9 layers with AutoCAD Color Index):
+
+| Layer | Description | Color Code | Lineweight | Linetype |
+|-------|-------------|------------|------------|----------|
+| FRAME | Window frame outline | 7 (White/Black) | 0.50mm | Continuous |
+| SASH_TOP | Top sash outline | 3 (Green) | 0.35mm | Continuous |
+| SASH_BOTTOM | Bottom sash outline | 5 (Blue) | 0.35mm | Continuous |
+| GLASS | Glass panel outline | 4 (Cyan) | 0.18mm | Continuous |
+| BARS_V | Vertical glazing bars | 1 (Red) | 0.25mm | Continuous |
+| BARS_H | Horizontal glazing bars | 2 (Yellow) | 0.25mm | Continuous |
+| DIMENSIONS | Dimension lines & text | 8 (Dark Gray) | 0.18mm | Continuous |
+| CENTERLINES | Reference axes | 9 (Light Gray) | 0.18mm | DashDot |
+| ANNOTATIONS | Metadata text | 6 (Magenta) | 0.25mm | Continuous |
+
+**Dimension Standards** (ISO compliant):
+- Text height: 3.5mm
+- Text offset: 5mm from geometry
+- Arrow style: Standard ISO arrows (3mm)
+- Dimension targets:
+  - Overall frame width & height
+  - Glass area width & height
+  - Bar spacing (annotated)
+
+**Metadata** (included in ANNOTATIONS layer):
+- Project name
+- Window ID
+- Client name
+- Date
+- Dimensions
+- Paint color
+- Hardware finish
+
+#### SVG Export (🖼 Export SVG)
+
+**Scalable vector graphics for documentation:**
+- XML-based vector format
+- Embedded metadata (title, description)
+- Layer-based organization using SVG `<g>` groups
+- Arrow markers for dimensions
+- Professional color scheme with hex codes
+- Perfect for web, documentation, print
+
+**Optional Preview Rendering:**
+- Auto-generates PNG preview (800px width, 150 DPI)
+- Requires `cairosvg` library: `pip install cairosvg`
+- Displayed in GUI after export
+- Saved alongside SVG file
+
+#### PNG Export (📷 Export PNG)
+
+- High-resolution raster images (300 DPI)
+- Anti-aliased rendering
 - Customizable resolution and background color
 
-### Graphics Color Scheme
+### Usage Examples
 
-The graphics system uses a professional color scheme:
-- **Frame**: `#444444` (Dark gray)
-- **Sash**: `#4A90E2` (Professional blue)
-- **Glass**: `#A0C4FF` (Light blue, 40% transparency)
-- **Bars**: `#AAAAAA` (Medium gray, dotted lines)
-- **Dimensions**: `#FF6B6B` (Red for dimension lines and text)
+#### Basic CAD Export (GUI)
+
+1. Configure and calculate a window
+2. Click **💾 Export DXF** or **🖼 Export SVG**
+3. Export runs in background (non-blocking)
+4. File saved to `output/cad/` directory
+5. Preview auto-generated (SVG only, if cairosvg installed)
+
+#### Programmatic Usage
+
+```python
+from gui_app.backend.calculations import assemble_window
+from gui_app.graphics.scene import build_scene
+from gui_app.graphics.export_dxf import DXFExporter
+from gui_app.graphics.export_svg import SVGExporter
+
+# 1. Create window
+window = assemble_window(
+    window_id="w1",
+    name="Living Room",
+    frame_width=1200,
+    frame_height=1600,
+    vertical_bars=2,
+    horizontal_bars=2,
+    paint_color="White",
+    hardware_finish="Chrome"
+)
+
+# 2. Build scene
+scene = build_scene(window, include_dimensions=True)
+
+# 3. Export to DXF
+dxf_exporter = DXFExporter(output_dir="output/cad")
+dxf_path = dxf_exporter.export_from_scene(scene)
+print(f"DXF saved: {dxf_path}")
+
+# 4. Export to SVG
+svg_exporter = SVGExporter(output_dir="output/cad")
+svg_path = svg_exporter.export_from_scene(scene)
+print(f"SVG saved: {svg_path}")
+
+# 5. Generate preview (optional)
+from gui_app.graphics.preview import render_preview_svg, is_preview_available
+
+if is_preview_available():
+    png_path = render_preview_svg(
+        svg_path,
+        "output/cad/preview.png",
+        width=800,
+        dpi=150
+    )
+    print(f"Preview: {png_path}")
+```
+
+### Dependencies for Graphics
+
+**Core (Required):**
+```bash
+pip install PyQt6 ezdxf svgwrite matplotlib
+```
+
+**Optional (SVG Preview):**
+```bash
+pip install cairosvg
+```
+
+**System Requirements for cairosvg:**
+- **Ubuntu/Debian**: `sudo apt-get install libcairo2`
+- **macOS**: `brew install cairo`
+- **Windows**: Download from https://www.cairographics.org/
+
+### Output Directory Structure
+
+```
+output/
+├── {project}_report.pdf          # PDF reports
+├── {project}_report.xlsx         # Excel workbooks
+├── {window}_drawing.png          # matplotlib drawings
+├── cad/                          # CAD exports (NEW)
+│   ├── {window}_cad.dxf         # DXF CAD files
+│   ├── {window}_vector.svg      # SVG vector files
+│   └── {window}_vector.png      # SVG previews (if cairosvg installed)
+```
+
+### Graphics Color Scheme (SVG/PNG)
+
+The graphics system uses professional hex colors:
+- **Frame**: `#2C2C2C` (Dark gray)
+- **Sash Top/Bottom**: `#4A90E2` (Professional blue)
+- **Glass**: `#A0C4FF` (Light blue)
+- **Bars**: `#888888` (Medium gray)
+- **Dimensions**: `#FF0000` (Red)
+- **Centerlines**: `#00FF00` (Green)
+- **Annotations**: `#000000` (Black)
 
 ## Development
 
