@@ -1,4 +1,4 @@
-"""PyQt6 interface for the Skylon Elements Sash Window Designer."""
+"""PyQt6 interface for the Skylon Elements Sash Window Designer with Graphics."""
 from __future__ import annotations
 
 import sys
@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Dict, Tuple
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThreadPool
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -21,13 +21,27 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QProgressBar,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
 from .backend import calculations, database, drawings, export_excel, export_pdf
-from .backend.models import Project
+from .backend.models import Project, Window
+
+# Graphics imports
+try:
+    from .graphics.viewer import GraphicsViewer
+    from .graphics.export_dxf import DXFExporter
+    from .graphics.export_svg import SVGExporter
+    from .graphics.export_png import PNGExporter
+    from .graphics.scene import build_scene
+    from .graphics.workers import ExportWorker, PreviewWorker
+    from .graphics.preview import is_preview_available
+    GRAPHICS_AVAILABLE = True
+except ImportError:
+    GRAPHICS_AVAILABLE = False
 
 
 class MainWindow(QMainWindow):
@@ -36,12 +50,26 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("Skylon Elements – Sash Window Designer")
-        self.resize(1200, 800)
+        self.resize(1400, 900)
 
         self._project: Project | None = None
         self._window_data: Dict[str, object] | None = None
         self._export_payload: Dict[str, object] | None = None
         self._drawings: Dict[str, str] = {}
+        self._current_window: Window | None = None
+
+        # Graphics exporters
+        if GRAPHICS_AVAILABLE:
+            self._dxf_exporter = DXFExporter(output_dir="output/cad")
+            self._svg_exporter = SVGExporter(output_dir="output/cad")
+            self._png_exporter = PNGExporter()
+            self._thread_pool = QThreadPool.globalInstance()
+            self._thread_pool.setMaxThreadCount(4)  # Allow up to 4 concurrent exports
+        else:
+            self._dxf_exporter = None
+            self._svg_exporter = None
+            self._png_exporter = None
+            self._thread_pool = None
 
         self._build_ui()
         self._apply_stylesheet()
@@ -132,7 +160,91 @@ class MainWindow(QMainWindow):
         left_panel.setLayout(config_container)
         main_layout.addWidget(left_panel, 1)
 
-        # Right panel with results and preview
+        # Create tabs for Graphics and Results
+        self.tabs = QTabWidget()
+
+        if GRAPHICS_AVAILABLE:
+            self._build_graphics_tab()
+
+        self._build_results_tab()
+
+        main_layout.addWidget(self.tabs, 2)
+
+    def _build_graphics_tab(self) -> None:
+        """Build the Graphics visualization tab."""
+        graphics_tab = QWidget()
+        graphics_layout = QVBoxLayout()
+        graphics_tab.setLayout(graphics_layout)
+
+        # Toolbar for graphics actions
+        toolbar_widget = QWidget()
+        toolbar_layout = QHBoxLayout()
+        toolbar_widget.setLayout(toolbar_layout)
+        toolbar_layout.setContentsMargins(0, 0, 0, 0)
+
+        # Toolbar buttons
+        self.refresh_graphics_button = QPushButton("🔄 Refresh")
+        self.refresh_graphics_button.setToolTip("Refresh graphics view")
+        self.refresh_graphics_button.clicked.connect(self.on_refresh_graphics)
+        self.refresh_graphics_button.setEnabled(False)
+
+        self.zoom_fit_button = QPushButton("🔍 Fit")
+        self.zoom_fit_button.setToolTip("Fit to window")
+        self.zoom_fit_button.clicked.connect(self.on_zoom_fit)
+        self.zoom_fit_button.setEnabled(False)
+
+        self.zoom_in_button = QPushButton("➕ Zoom In")
+        self.zoom_in_button.setToolTip("Zoom in")
+        self.zoom_in_button.clicked.connect(self.on_zoom_in)
+        self.zoom_in_button.setEnabled(False)
+
+        self.zoom_out_button = QPushButton("➖ Zoom Out")
+        self.zoom_out_button.setToolTip("Zoom out")
+        self.zoom_out_button.clicked.connect(self.on_zoom_out)
+        self.zoom_out_button.setEnabled(False)
+
+        self.export_dxf_button = QPushButton("💾 Export DXF")
+        self.export_dxf_button.setToolTip("Export to DXF CAD format")
+        self.export_dxf_button.clicked.connect(self.on_export_dxf)
+        self.export_dxf_button.setEnabled(False)
+
+        self.export_svg_button = QPushButton("🖼 Export SVG")
+        self.export_svg_button.setToolTip("Export to SVG vector format")
+        self.export_svg_button.clicked.connect(self.on_export_svg)
+        self.export_svg_button.setEnabled(False)
+
+        self.export_png_graphics_button = QPushButton("📷 Export PNG")
+        self.export_png_graphics_button.setToolTip("Export to PNG image format")
+        self.export_png_graphics_button.clicked.connect(self.on_export_png_graphics)
+        self.export_png_graphics_button.setEnabled(False)
+
+        toolbar_layout.addWidget(self.refresh_graphics_button)
+        toolbar_layout.addWidget(self.zoom_fit_button)
+        toolbar_layout.addWidget(self.zoom_in_button)
+        toolbar_layout.addWidget(self.zoom_out_button)
+        toolbar_layout.addStretch()
+        toolbar_layout.addWidget(self.export_dxf_button)
+        toolbar_layout.addWidget(self.export_svg_button)
+        toolbar_layout.addWidget(self.export_png_graphics_button)
+
+        graphics_layout.addWidget(toolbar_widget)
+
+        # Graphics viewer
+        self.graphics_viewer = GraphicsViewer()
+        graphics_layout.addWidget(self.graphics_viewer, 1)
+
+        # Graphics status label
+        self.graphics_status_label = QLabel("Configure window and click Calculate to view graphics")
+        graphics_layout.addWidget(self.graphics_status_label)
+
+        self.tabs.addTab(graphics_tab, "Graphics")
+
+    def _build_results_tab(self) -> None:
+        """Build the Results & Preview tab."""
+        results_tab = QWidget()
+        results_layout = QVBoxLayout()
+        results_tab.setLayout(results_layout)
+
         right_panel = QGroupBox("Results & Preview")
         right_layout = QVBoxLayout()
         right_panel.setLayout(right_layout)
@@ -159,7 +271,8 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel("Waiting for calculation…")
         right_layout.addWidget(self.status_label)
 
-        main_layout.addWidget(right_panel, 1)
+        results_layout.addWidget(right_panel)
+        self.tabs.addTab(results_tab, "Results")
 
     def _apply_stylesheet(self) -> None:
         style_path = Path(__file__).resolve().parent / "resources" / "style.qss"
@@ -191,7 +304,6 @@ class MainWindow(QMainWindow):
 
     def _calculate_sash_heights(self, frame_height: float) -> Tuple[float, float]:
         """Split the frame height into top and bottom sash heights."""
-
         sash_height = frame_height / 2
         return sash_height, sash_height
 
@@ -227,6 +339,18 @@ class MainWindow(QMainWindow):
         self.pdf_button.setEnabled(enabled)
         self.excel_button.setEnabled(enabled)
 
+    def _set_graphics_buttons_enabled(self, enabled: bool) -> None:
+        """Enable or disable graphics buttons."""
+        if not GRAPHICS_AVAILABLE:
+            return
+        self.refresh_graphics_button.setEnabled(enabled)
+        self.zoom_fit_button.setEnabled(enabled)
+        self.zoom_in_button.setEnabled(enabled)
+        self.zoom_out_button.setEnabled(enabled)
+        self.export_dxf_button.setEnabled(enabled)
+        self.export_svg_button.setEnabled(enabled)
+        self.export_png_graphics_button.setEnabled(enabled)
+
     def _toggle_progress(self, show: bool) -> None:
         self.progress_bar.setVisible(show)
         if show:
@@ -240,6 +364,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     def on_calculate(self) -> None:
         self._set_export_buttons_enabled(False)
+        self._set_graphics_buttons_enabled(False)
         self.status_label.setText("Calculating…")
         try:
             project_name = self.project_name_edit.text().strip() or "Untitled Project"
@@ -293,11 +418,18 @@ class MainWindow(QMainWindow):
             self._drawings = {window.id: drawing_path}
 
             self._project = project
+            self._current_window = window
             self._window_data = window_export
             self._export_payload = export_payload
 
             self._update_results_label(window_export)
             self._update_preview()
+
+            # Update graphics viewer
+            if GRAPHICS_AVAILABLE:
+                self.graphics_viewer.set_window(window)
+                self.graphics_status_label.setText("✅ Graphics rendered successfully")
+                self._set_graphics_buttons_enabled(True)
 
             self.append_log("✅ Calculations complete.")
 
@@ -320,12 +452,17 @@ class MainWindow(QMainWindow):
             self.status_label.setText("❌ Calculation failed")
             QMessageBox.critical(self, "Calculation Error", str(exc))
             self._project = None
+            self._current_window = None
             self._window_data = None
             self._export_payload = None
             self._drawings = {}
             self._set_export_buttons_enabled(False)
+            self._set_graphics_buttons_enabled(False)
             self.preview_label.clear()
             self.results_label.setText("Calculation failed. Check inputs and retry.")
+            if GRAPHICS_AVAILABLE:
+                self.graphics_viewer.clear()
+                self.graphics_status_label.setText("No graphics to display")
 
     def on_generate_pdf(self) -> None:
         if not self._export_payload or not self._window_data:
@@ -364,6 +501,242 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Excel Error", str(exc))
         finally:
             self._toggle_progress(False)
+
+    # ------------------------------------------------------------------
+    # Graphics event handlers
+    # ------------------------------------------------------------------
+    def on_refresh_graphics(self) -> None:
+        """Refresh the graphics view."""
+        if not self._current_window or not GRAPHICS_AVAILABLE:
+            return
+        self.graphics_viewer.set_window(self._current_window)
+        self.graphics_status_label.setText("✅ Graphics refreshed")
+        self.append_log("Graphics view refreshed")
+
+    def on_zoom_fit(self) -> None:
+        """Fit graphics to window."""
+        if GRAPHICS_AVAILABLE:
+            self.graphics_viewer.fit_to_window()
+
+    def on_zoom_in(self) -> None:
+        """Zoom in graphics."""
+        if GRAPHICS_AVAILABLE:
+            self.graphics_viewer.zoom_in()
+
+    def on_zoom_out(self) -> None:
+        """Zoom out graphics."""
+        if GRAPHICS_AVAILABLE:
+            self.graphics_viewer.zoom_out()
+
+    def on_export_dxf(self) -> None:
+        """Export to DXF format using threaded worker."""
+        if not self._current_window or not self._dxf_exporter:
+            QMessageBox.warning(self, "No Data", "Please run a calculation first.")
+            return
+
+        # Build scene from current window
+        try:
+            scene = build_scene(self._current_window, include_dimensions=True)
+        except Exception as exc:
+            self.append_log(f"❌ Scene building failed: {exc}")
+            QMessageBox.critical(self, "Scene Error", str(exc))
+            return
+
+        # Add metadata to exporter
+        self._dxf_exporter._add_metadata(
+            project_name=self._project.name if self._project else "N/A",
+            client_name=self._project.client_name if self._project else "N/A"
+        )
+
+        # Create and configure worker
+        worker = ExportWorker(
+            self._dxf_exporter.export_from_scene,
+            scene,
+            output_path=None
+        )
+        worker.signals.started.connect(lambda: self._on_export_started("DXF"))
+        worker.signals.progress.connect(self._on_export_progress)
+        worker.signals.finished.connect(self._on_dxf_export_finished)
+        worker.signals.error.connect(self._on_export_error)
+
+        # Start worker in thread pool
+        self._thread_pool.start(worker)
+        self._toggle_progress(True)
+        self.graphics_status_label.setText("Exporting DXF in background…")
+        self.append_log("DXF export started…")
+
+    def on_export_svg(self) -> None:
+        """Export to SVG format using threaded worker."""
+        if not self._current_window or not self._svg_exporter:
+            QMessageBox.warning(self, "No Data", "Please run a calculation first.")
+            return
+
+        # Build scene from current window
+        try:
+            scene = build_scene(self._current_window, include_dimensions=True)
+        except Exception as exc:
+            self.append_log(f"❌ Scene building failed: {exc}")
+            QMessageBox.critical(self, "Scene Error", str(exc))
+            return
+
+        # Add metadata to exporter
+        self._svg_exporter._add_metadata(
+            project_name=self._project.name if self._project else "N/A",
+            client_name=self._project.client_name if self._project else "N/A"
+        )
+
+        # Create and configure worker
+        worker = ExportWorker(
+            self._svg_exporter.export_from_scene,
+            scene,
+            output_path=None
+        )
+        worker.signals.started.connect(lambda: self._on_export_started("SVG"))
+        worker.signals.progress.connect(self._on_export_progress)
+        worker.signals.finished.connect(self._on_svg_export_finished)
+        worker.signals.error.connect(self._on_export_error)
+
+        # Start worker in thread pool
+        self._thread_pool.start(worker)
+        self._toggle_progress(True)
+        self.graphics_status_label.setText("Exporting SVG in background…")
+        self.append_log("SVG export started…")
+
+    def on_export_png_graphics(self) -> None:
+        """Export to PNG format."""
+        if not self._current_window or not self._png_exporter:
+            QMessageBox.warning(self, "No Data", "Please run a calculation first.")
+            return
+
+        self._toggle_progress(True)
+        self.graphics_status_label.setText("Exporting PNG…")
+        QApplication.processEvents()
+        try:
+            self._png_exporter._add_metadata(
+                project_name=self._project.name if self._project else "N/A",
+                client_name=self._project.client_name if self._project else "N/A"
+            )
+            png_path = self._png_exporter.export_window(self._current_window, dpi=300)
+            self.append_log(f"✅ PNG Exported: {png_path}")
+            self.graphics_status_label.setText(f"✅ PNG: {png_path}")
+        except Exception as exc:
+            self.append_log(f"❌ PNG export failed: {exc}")
+            self.graphics_status_label.setText("❌ PNG export failed")
+            QMessageBox.critical(self, "PNG Error", str(exc))
+        finally:
+            self._toggle_progress(False)
+
+    # ------------------------------------------------------------------
+    # Threaded export callbacks
+    # ------------------------------------------------------------------
+    def _on_export_started(self, export_type: str) -> None:
+        """Called when export worker starts.
+
+        Args:
+            export_type: Type of export (DXF, SVG, etc.)
+        """
+        self.append_log(f"{export_type} export worker started")
+
+    def _on_export_progress(self, value: int) -> None:
+        """Called when export worker reports progress.
+
+        Args:
+            value: Progress value (0-100)
+        """
+        self.progress_bar.setValue(value)
+        self.progress_bar.setRange(0, 100)
+
+    def _on_dxf_export_finished(self, file_path: str) -> None:
+        """Called when DXF export worker completes successfully.
+
+        Args:
+            file_path: Path to exported DXF file
+        """
+        self._toggle_progress(False)
+        self.append_log(f"✅ DXF Exported: {file_path}")
+        self.graphics_status_label.setText(f"✅ DXF: {Path(file_path).name}")
+        QMessageBox.information(
+            self,
+            "Export Complete",
+            f"DXF file saved to:\n{file_path}"
+        )
+
+    def _on_svg_export_finished(self, file_path: str) -> None:
+        """Called when SVG export worker completes successfully.
+
+        Args:
+            file_path: Path to exported SVG file
+        """
+        self._toggle_progress(False)
+        self.append_log(f"✅ SVG Exported: {file_path}")
+        self.graphics_status_label.setText(f"✅ SVG: {Path(file_path).name}")
+
+        # Auto-generate preview if available
+        if is_preview_available():
+            self._generate_svg_preview(file_path)
+        else:
+            QMessageBox.information(
+                self,
+                "Export Complete",
+                f"SVG file saved to:\n{file_path}\n\n"
+                "Install cairosvg for preview support:\n"
+                "pip install cairosvg"
+            )
+
+    def _on_export_error(self, error_msg: str) -> None:
+        """Called when export worker encounters an error.
+
+        Args:
+            error_msg: Error message
+        """
+        self._toggle_progress(False)
+        self.append_log(f"❌ Export failed: {error_msg}")
+        self.graphics_status_label.setText("❌ Export failed")
+        QMessageBox.critical(
+            self,
+            "Export Error",
+            f"Export failed:\n{error_msg}"
+        )
+
+    def _generate_svg_preview(self, svg_path: str) -> None:
+        """Generate PNG preview from SVG file using worker.
+
+        Args:
+            svg_path: Path to SVG file
+        """
+        png_path = str(Path(svg_path).with_suffix('.png'))
+
+        # Create preview worker
+        worker = PreviewWorker(
+            svg_path,
+            png_path,
+            width=800,
+            height=None,  # Auto-calculate from SVG
+            dpi=150
+        )
+        worker.signals.started.connect(
+            lambda: self.append_log("Generating SVG preview…")
+        )
+        worker.signals.finished.connect(self._on_preview_finished)
+        worker.signals.error.connect(
+            lambda msg: self.append_log(f"⚠ Preview failed: {msg}")
+        )
+
+        # Start worker
+        self._thread_pool.start(worker)
+
+    def _on_preview_finished(self, png_path: str) -> None:
+        """Called when preview generation completes.
+
+        Args:
+            png_path: Path to generated PNG preview
+        """
+        self.append_log(f"✅ Preview generated: {png_path}")
+        QMessageBox.information(
+            self,
+            "Export Complete",
+            f"SVG and preview saved:\n{png_path}"
+        )
 
 
 def main() -> None:
