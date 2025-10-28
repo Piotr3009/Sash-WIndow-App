@@ -6,20 +6,33 @@ Professional desktop application for designing and managing sash window producti
 
 - **Window Configuration**: Design sash windows with customizable dimensions, paint colors, hardware finishes, and glazing options
 - **Automatic Calculations**: Calculates frame, sash, and glass dimensions based on manufacturing standards
+- **Advanced Graphics & CAD System** 🎨:
+  - Real-time 2D visualization with interactive viewer (pan, zoom, fit-to-window)
+  - Professional CAD export to DXF format (compatible with AutoCAD, LibreCAD)
+  - Scalable vector graphics (SVG) export for documentation
+  - High-resolution PNG export with anti-aliasing
+  - Proper layering system (FRAME, SASH, GLASS, BARS, DIMENSIONS)
+  - Color-coded components with transparency support
+  - Dimension lines with measurements in millimeters
 - **Technical Drawings**: Generates detailed technical drawings with matplotlib
 - **Material Cutting Lists**: Automatic generation of timber cutting lists and material specifications
 - **Export Options**:
   - PDF reports with specifications, cutting lists, and shopping lists
   - Excel spreadsheets with detailed window data
+  - DXF CAD files for manufacturing
+  - SVG vector graphics for scalable documentation
+  - PNG raster images for presentations
 - **Database Integration**: Optional Supabase integration for project persistence
-- **Professional UI**: Clean, intuitive interface with real-time preview
+- **Professional UI**: Clean, intuitive tabbed interface with Graphics and Results views
+- **Future-Ready Architecture**: Placeholder modules for 3D visualization (STL/OBJ), CNC G-code generation, and material nesting optimization
 
 ## Screenshots
 
 The application provides:
-- Left panel: Window configuration inputs
-- Right panel: Results preview, technical drawing, and log output
-- Export buttons for PDF and Excel generation
+- **Left panel**: Window configuration inputs with all design parameters
+- **Graphics tab**: Interactive 2D viewer with pan/zoom controls and CAD export buttons (DXF, SVG, PNG)
+- **Results tab**: Results preview, technical drawing, and log output
+- **Export buttons**: PDF, Excel, DXF, SVG, and PNG generation
 
 ## Requirements
 
@@ -111,9 +124,15 @@ sash-window-app
 ### Output Files
 
 Generated files are saved in the `output/` directory:
-- `{project_name}_report.pdf` - Full specification report
-- `{project_name}_report.xlsx` - Detailed Excel workbook
-- `{window_name}_drawing.png` - Technical drawing
+- **`output/` directory**: Legacy exports (PDF, Excel, matplotlib drawings)
+  - `{project_name}_report.pdf` - Full specification report
+  - `{project_name}_report.xlsx` - Detailed Excel workbook
+  - `{window_name}_drawing.png` - Technical drawing (matplotlib)
+
+- **`output/graphics/` directory**: Professional CAD and graphics exports
+  - `{window_name}_cad.dxf` - DXF CAD file (R2018 format, layered)
+  - `{window_name}_vector.svg` - SVG scalable vector graphics
+  - `{window_name}_preview.png` - High-resolution PNG (300 DPI)
 
 ## Project Structure
 
@@ -123,30 +142,102 @@ Sash-WIndow-App/
 │   ├── backend/
 │   │   ├── calculations.py    # Window dimension calculations
 │   │   ├── database.py        # Supabase integration
-│   │   ├── drawings.py        # Technical drawing generation
+│   │   ├── drawings.py        # Technical drawing generation (matplotlib)
 │   │   ├── export_excel.py    # Excel export functionality
 │   │   ├── export_pdf.py      # PDF report generation
 │   │   ├── models.py          # Data models
 │   │   └── main.py            # Backend demo script
+│   ├── graphics/              # 🎨 NEW: Advanced Graphics & CAD System
+│   │   ├── base_exporter.py   # Abstract base class for exporters
+│   │   ├── renderer.py        # Core geometry and rendering logic
+│   │   ├── viewer.py          # PyQt6 interactive graphics viewer
+│   │   ├── export_dxf.py      # DXF CAD export (ezdxf)
+│   │   ├── export_svg.py      # SVG vector export
+│   │   ├── export_png.py      # PNG raster export
+│   │   ├── export_3d.py       # Placeholder: STL/OBJ (future)
+│   │   ├── export_gcode.py    # Placeholder: CNC G-code (future)
+│   │   └── nesting.py         # Placeholder: Material optimization (future)
 │   ├── resources/
 │   │   ├── icons/             # Application icons
 │   │   └── style.qss          # Qt stylesheet
 │   ├── __init__.py
-│   └── main_gui.py            # Main GUI application
+│   └── main_gui.py            # Main GUI application with Graphics tab
+├── tests/                     # Test suite
+│   └── graphics/              # Graphics module tests
+│       └── test_renderer.py   # Renderer tests
+├── docs/                      # Documentation
+│   └── graphics/
+│       └── preview/           # Example screenshots and exports
+├── output/                    # Generated output files
+│   └── graphics/              # CAD and graphics exports
 ├── main_gui.py                # Application entry point
 ├── requirements.txt           # Python dependencies
 ├── pyproject.toml            # Modern Python packaging
+├── setup.sh / setup.bat      # Automated setup scripts
 ├── .env.example              # Environment configuration template
 ├── .gitignore                # Git ignore rules
 └── README.md                 # This file
 ```
+
+## Graphics System Usage
+
+### Interactive Graphics Viewer
+
+After calculating a window design, switch to the **Graphics** tab to access:
+
+- **🔄 Refresh**: Regenerate graphics visualization
+- **🔍 Fit**: Fit window to view
+- **➕ Zoom In / ➖ Zoom Out**: Interactive zoom controls
+- **Mouse wheel**: Zoom in/out
+- **Click and drag**: Pan the view
+
+### CAD Export Features
+
+**DXF Export** (💾 Export DXF):
+- Industry-standard CAD format
+- Compatible with AutoCAD, LibreCAD, QCAD, and other CAD software
+- Proper layering: FRAME, SASH_TOP, SASH_BOTTOM, GLASS, BARS, DIMENSIONS, TEXT
+- Units: millimeters
+- Line weights: 0.15-0.50mm
+- DXF version: R2018
+- Includes metadata block with project information
+
+**SVG Export** (🖼 Export SVG):
+- Scalable vector graphics format
+- Perfect for documentation, web pages, and print materials
+- Maintains full quality at any scale
+- Embedded metadata
+- Layer-based organization using SVG groups
+- Arrow markers for dimension lines
+
+**PNG Export** (📷 Export PNG):
+- High-resolution raster images (default 300 DPI)
+- Anti-aliased rendering for professional quality
+- Suitable for presentations, reports, and print
+- Customizable resolution and background color
+
+### Graphics Color Scheme
+
+The graphics system uses a professional color scheme:
+- **Frame**: `#444444` (Dark gray)
+- **Sash**: `#4A90E2` (Professional blue)
+- **Glass**: `#A0C4FF` (Light blue, 40% transparency)
+- **Bars**: `#AAAAAA` (Medium gray, dotted lines)
+- **Dimensions**: `#FF6B6B` (Red for dimension lines and text)
 
 ## Development
 
 ### Running Tests
 
 ```bash
+# Run all tests
 pytest
+
+# Run graphics tests only
+pytest tests/graphics/
+
+# Run with coverage
+pytest --cov=gui_app --cov-report=term-missing
 ```
 
 ### Code Quality

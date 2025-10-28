@@ -10,6 +10,9 @@ reportlab>=4.0.0
 # Plotting and Drawing
 matplotlib>=3.9.0
 
+# CAD and Graphics Export
+ezdxf>=1.3.0
+
 # Database (Optional - for Supabase integration)
 supabase>=2.0.0
 
