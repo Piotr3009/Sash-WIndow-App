@@ -11,6 +11,8 @@ from typing import Optional, Any
 
 from .base_exporter import BaseExporter
 from .renderer import WindowRenderer, ColorScheme
+from .layers import get_layer_properties, get_svg_stroke_width, get_svg_dash_pattern, LayerName
+from .geometry import Point2D
 from ..backend.models import Window, Project
 
 
@@ -336,6 +338,338 @@ class SVGExporter(BaseExporter):
         tree.write(file_path, encoding='utf-8', xml_declaration=True)
 
         return str(file_path)
+
+    def export_from_scene(
+        self,
+        scene: dict,
+        output_path: Optional[str] = None,
+        background_color: str = 'white'
+    ) -> str:
+        """Export a window from a pre-built scene dictionary.
+
+        This is the recommended method for SVG export using the scene-based
+        architecture. Supports all scene geometry types and proper layering.
+
+        Args:
+            scene: Scene dictionary from build_scene()
+            output_path: Optional custom output path
+            background_color: Background color (default 'white')
+
+        Returns:
+            Path to generated SVG file
+        """
+        metadata = scene['metadata']
+        bounds = scene['bounds']
+
+        # Calculate canvas size
+        canvas_width = bounds.max_point.x - bounds.min_point.x
+        canvas_height = bounds.max_point.y - bounds.min_point.y
+
+        # Create SVG root
+        svg = self._create_svg_root(canvas_width, canvas_height)
+        self._add_scene_svg_metadata(svg, scene)
+        self._add_scene_definitions(svg)
+
+        # Add background
+        ET.SubElement(
+            svg,
+            'rect',
+            {
+                'x': '0',
+                'y': '0',
+                'width': str(canvas_width),
+                'height': str(canvas_height),
+                'fill': background_color
+            }
+        )
+
+        # Calculate offset (account for bottom-left origin in CAD)
+        offset_x = -bounds.min_point.x
+        offset_y = -bounds.min_point.y
+
+        # Create layer groups
+        layer_groups = {}
+        for layer_name in scene['layers'].keys():
+            props = get_layer_properties(layer_name)
+            group = ET.SubElement(
+                svg,
+                'g',
+                {
+                    'id': f'layer-{layer_name.lower()}',
+                    'data-description': props.description
+                }
+            )
+            layer_groups[layer_name] = group
+
+        # Process each layer's geometry
+        for layer_name, geometries in scene['layers'].items():
+            group = layer_groups[layer_name]
+            props = get_layer_properties(layer_name)
+            stroke_width = get_svg_stroke_width(layer_name)
+            dash_pattern = get_svg_dash_pattern(props.linetype)
+
+            for geom in geometries:
+                geom_type = geom.get('type')
+
+                if geom_type == 'polyline':
+                    # Convert Point2D objects to SVG path
+                    points = geom['points']
+                    path_data = self._points_to_svg_path(points, offset_x, offset_y)
+
+                    ET.SubElement(
+                        group,
+                        'path',
+                        {
+                            'd': path_data,
+                            'stroke': props.color,
+                            'stroke-width': str(stroke_width),
+                            'fill': 'none',
+                            'stroke-dasharray': dash_pattern
+                        }
+                    )
+
+                elif geom_type == 'line':
+                    start = geom['start']
+                    end = geom['end']
+                    ET.SubElement(
+                        group,
+                        'line',
+                        {
+                            'x1': str(start.x + offset_x),
+                            'y1': str(start.y + offset_y),
+                            'x2': str(end.x + offset_x),
+                            'y2': str(end.y + offset_y),
+                            'stroke': props.color,
+                            'stroke-width': str(stroke_width),
+                            'stroke-dasharray': dash_pattern
+                        }
+                    )
+
+                elif geom_type == 'text':
+                    pos = geom['position']
+                    rotation = geom.get('rotation', 0)
+                    alignment = geom.get('alignment', 'left')
+
+                    attribs = {
+                        'x': str(pos.x + offset_x),
+                        'y': str(pos.y + offset_y),
+                        'fill': props.color,
+                        'font-size': str(geom['height']),
+                        'font-family': 'Arial, sans-serif',
+                        'text-anchor': self._get_svg_anchor(alignment),
+                    }
+                    if rotation != 0:
+                        attribs['transform'] = f'rotate({rotation} {pos.x + offset_x} {pos.y + offset_y})'
+
+                    text_elem = ET.SubElement(group, 'text', attribs)
+                    text_elem.text = geom['text']
+
+                elif geom_type in ('dimension_horizontal', 'dimension_vertical'):
+                    # Add dimension components
+                    self._add_dimension_to_svg(group, geom, props, offset_x, offset_y)
+
+        # Determine output path
+        if output_path:
+            file_path = output_path
+        else:
+            window_name = metadata.get('window_name', 'window')
+            output_dir = self._ensure_output_dir()
+            file_path = output_dir / f"{window_name}_vector.svg"
+
+        # Write SVG file with proper formatting
+        tree = ET.ElementTree(svg)
+        ET.indent(tree, space="  ")
+        tree.write(str(file_path), encoding='utf-8', xml_declaration=True)
+
+        return str(file_path)
+
+    def _points_to_svg_path(
+        self,
+        points: list,
+        offset_x: float,
+        offset_y: float
+    ) -> str:
+        """Convert list of Point2D to SVG path data.
+
+        Args:
+            points: List of Point2D objects
+            offset_x: X offset for translation
+            offset_y: Y offset for translation
+
+        Returns:
+            SVG path data string
+        """
+        if not points:
+            return ""
+
+        path_parts = []
+        for i, point in enumerate(points):
+            x = point.x + offset_x
+            y = point.y + offset_y
+            if i == 0:
+                path_parts.append(f"M {x} {y}")
+            else:
+                path_parts.append(f"L {x} {y}")
+
+        return " ".join(path_parts)
+
+    def _get_svg_anchor(self, alignment: str) -> str:
+        """Convert alignment string to SVG text-anchor.
+
+        Args:
+            alignment: Alignment string (left, center, right)
+
+        Returns:
+            SVG text-anchor value
+        """
+        mapping = {
+            'left': 'start',
+            'center': 'middle',
+            'right': 'end',
+        }
+        return mapping.get(alignment.lower(), 'start')
+
+    def _add_scene_svg_metadata(self, svg: ET.Element, scene: dict) -> None:
+        """Add metadata from scene to SVG.
+
+        Args:
+            svg: SVG root element
+            scene: Scene dictionary
+        """
+        metadata_elem = ET.SubElement(svg, 'metadata')
+
+        title = ET.SubElement(metadata_elem, 'title')
+        title.text = f"{scene['metadata']['window_name']} - Sash Window Technical Drawing"
+
+        desc = ET.SubElement(metadata_elem, 'desc')
+        desc.text = (
+            f"Generated by Skylon Elements Sash Window Designer. "
+            f"Window ID: {scene['metadata']['window_id']}, "
+            f"Date: {scene['metadata']['generated_at'][:10]}"
+        )
+
+    def _add_scene_definitions(self, svg: ET.Element) -> None:
+        """Add reusable definitions for scene-based rendering.
+
+        Args:
+            svg: SVG root element
+        """
+        defs = ET.SubElement(svg, 'defs')
+
+        # Define arrow marker for dimensions
+        marker = ET.SubElement(
+            defs,
+            'marker',
+            {
+                'id': 'dim-arrow',
+                'markerWidth': '10',
+                'markerHeight': '10',
+                'refX': '9',
+                'refY': '3',
+                'orient': 'auto',
+                'markerUnits': 'strokeWidth'
+            }
+        )
+        ET.SubElement(
+            marker,
+            'path',
+            {
+                'd': 'M0,0 L0,6 L9,3 z',
+                'fill': '#FF0000'
+            }
+        )
+
+    def _add_dimension_to_svg(
+        self,
+        group: ET.Element,
+        geom: dict,
+        props: Any,
+        offset_x: float,
+        offset_y: float
+    ) -> None:
+        """Add dimension geometry to SVG group.
+
+        Args:
+            group: SVG group element
+            geom: Geometry dictionary
+            props: Layer properties
+            offset_x: X offset
+            offset_y: Y offset
+        """
+        dim_data = geom['data']
+
+        # Extension lines
+        for ext_line in dim_data['extension_lines']:
+            start = ext_line['start']
+            end = ext_line['end']
+            ET.SubElement(
+                group,
+                'line',
+                {
+                    'x1': str(start.x + offset_x),
+                    'y1': str(start.y + offset_y),
+                    'x2': str(end.x + offset_x),
+                    'y2': str(end.y + offset_y),
+                    'stroke': props.color,
+                    'stroke-width': '0.18'
+                }
+            )
+
+        # Dimension line with arrows
+        dim_line = dim_data['dimension_line']
+        start = dim_line['start']
+        end = dim_line['end']
+        ET.SubElement(
+            group,
+            'line',
+            {
+                'x1': str(start.x + offset_x),
+                'y1': str(start.y + offset_y),
+                'x2': str(end.x + offset_x),
+                'y2': str(end.y + offset_y),
+                'stroke': props.color,
+                'stroke-width': '0.18',
+                'marker-start': 'url(#dim-arrow)',
+                'marker-end': 'url(#dim-arrow)'
+            }
+        )
+
+        # Arrows (as filled polygons)
+        for arrow in dim_data['arrows']:
+            from .dimensioning import create_arrow_polygon
+            arrow_points = create_arrow_polygon(
+                arrow.tip,
+                arrow.angle,
+                arrow.size
+            )
+            path_data = self._points_to_svg_path(arrow_points, offset_x, offset_y)
+            # Close the path
+            path_data += " Z"
+            ET.SubElement(
+                group,
+                'path',
+                {
+                    'd': path_data,
+                    'fill': props.color,
+                    'stroke': 'none'
+                }
+            )
+
+        # Dimension text
+        text = dim_data['text']
+        attribs = {
+            'x': str(text.position.x + offset_x),
+            'y': str(text.position.y + offset_y),
+            'fill': props.color,
+            'font-size': str(text.height),
+            'font-family': 'Arial, sans-serif',
+            'text-anchor': 'middle',
+        }
+        if text.rotation != 0:
+            attribs['transform'] = f'rotate({text.rotation} {text.position.x + offset_x} {text.position.y + offset_y})'
+
+        text_elem = ET.SubElement(group, 'text', attribs)
+        text_elem.text = text.text
 
     def export_project(
         self,

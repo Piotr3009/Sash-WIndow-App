@@ -70,14 +70,14 @@ class DimensionText:
 
 
 class DimensionBuilder:
-    """Builder for creating dimension lines with proper formatting."""
+    """Builder for creating dimension lines with ISO standard formatting."""
 
     def __init__(
         self,
         arrow_size: float = 3.0,
-        text_height: float = 3.5,
+        text_height: float = 3.5,  # ISO standard 3.5mm
         extension_overshoot: float = 2.0,
-        text_gap: float = 1.0
+        text_gap: float = 5.0  # ISO standard 5mm offset
     ):
         """Initialize dimension builder.
 

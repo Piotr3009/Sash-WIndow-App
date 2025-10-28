@@ -102,17 +102,17 @@ LAYER_DEFINITIONS: Dict[str, LayerProperties] = {
 }
 
 
-# DXF color indices (AutoCAD Color Index)
+# DXF color indices (AutoCAD Color Index) - ISO Standard
 DXF_COLORS: Dict[str, int] = {
-    LayerName.FRAME: 8,  # Dark gray
-    LayerName.SASH_TOP: 5,  # Blue
+    LayerName.FRAME: 7,  # White/Black (per ISO standard)
+    LayerName.SASH_TOP: 3,  # Green
     LayerName.SASH_BOTTOM: 5,  # Blue
     LayerName.GLASS: 4,  # Cyan
-    LayerName.BARS_V: 9,  # Light gray
-    LayerName.BARS_H: 9,  # Light gray
-    LayerName.DIMENSIONS: 1,  # Red
-    LayerName.CENTERLINES: 3,  # Green
-    LayerName.ANNOTATIONS: 7,  # Black/White
+    LayerName.BARS_V: 1,  # Red
+    LayerName.BARS_H: 2,  # Yellow
+    LayerName.DIMENSIONS: 8,  # Dark gray
+    LayerName.CENTERLINES: 9,  # Light gray
+    LayerName.ANNOTATIONS: 6,  # Magenta
 }
 
 

@@ -289,62 +289,143 @@ def _add_dimensions(
     window: Window,
     coord_sys: CoordinateSystem
 ) -> None:
-    """Add dimension lines to scene.
+    """Add dimension lines to scene per ISO standards.
+
+    Dimension targets:
+    - Overall width & height
+    - Glass area width & height
+    - Bar spacing (annotated)
 
     Args:
         scene: Scene dictionary to modify
         window: Window object
         coord_sys: Coordinate system
     """
-    dim_builder = DimensionBuilder()
+    # ISO standard: 3.5mm text height, 5mm offset
+    dim_builder = DimensionBuilder(text_height=3.5, text_gap=5.0)
 
     frame_w = window.frame.width
     frame_h = window.frame.height
 
-    # Frame width dimension (bottom)
+    # Overall frame width dimension (bottom)
     dim_h = dim_builder.create_horizontal_dimension(
         start_x=0,
         end_x=frame_w,
         y=0,
-        offset=-15.0,  # Below frame
-        precision=0
+        offset=-20.0,  # Below frame
+        precision=1
     )
     scene['layers'][LayerName.DIMENSIONS].append({
         'type': 'dimension_horizontal',
         'data': dim_h
     })
 
-    # Frame height dimension (right side)
+    # Overall frame height dimension (right side)
     dim_v = dim_builder.create_vertical_dimension(
         start_y=0,
         end_y=frame_h,
         x=frame_w,
-        offset=15.0,  # To the right
-        precision=0
+        offset=20.0,  # To the right
+        precision=1
     )
     scene['layers'][LayerName.DIMENSIONS].append({
         'type': 'dimension_vertical',
         'data': dim_v
     })
 
-    # Glass dimensions (if needed)
+    # Glass area dimensions
     if scene.get('_glass_coords'):
         glass_coords = scene['_glass_coords']
-        glass_width = glass_coords['bottom_right'].x - glass_coords['bottom_left'].x
-        glass_height = glass_coords['top_left'].y - glass_coords['bottom_left'].y
+        glass_left = glass_coords['bottom_left'].x
+        glass_right = glass_coords['bottom_right'].x
+        glass_bottom = glass_coords['bottom_left'].y
+        glass_top = glass_coords['top_left'].y
+        glass_width = glass_right - glass_left
+        glass_height = glass_top - glass_bottom
 
-        # Glass width dimension
+        # Glass width dimension (internal)
         dim_glass_w = dim_builder.create_horizontal_dimension(
-            start_x=glass_coords['bottom_left'].x,
-            end_x=glass_coords['bottom_right'].x,
-            y=glass_coords['bottom_left'].y,
-            offset=-10.0,
-            precision=0,
-            text_override=f"Glass {glass_width:.0f}"
+            start_x=glass_left,
+            end_x=glass_right,
+            y=glass_bottom,
+            offset=-12.0,
+            precision=1,
+            text_override=f"Glass {glass_width:.1f}"
         )
         scene['layers'][LayerName.DIMENSIONS].append({
             'type': 'dimension_horizontal',
             'data': dim_glass_w
+        })
+
+        # Glass height dimension (internal)
+        dim_glass_h = dim_builder.create_vertical_dimension(
+            start_y=glass_bottom,
+            end_y=glass_top,
+            x=glass_right,
+            offset=12.0,
+            precision=1,
+            text_override=f"Glass {glass_height:.1f}"
+        )
+        scene['layers'][LayerName.DIMENSIONS].append({
+            'type': 'dimension_vertical',
+            'data': dim_glass_h
+        })
+
+    # Bar spacing annotations
+    if window.bars.vertical_bars > 0 or window.bars.horizontal_bars > 0:
+        _add_bar_spacing_annotations(scene, window)
+
+
+def _add_bar_spacing_annotations(
+    scene: Dict[str, Any],
+    window: Window
+) -> None:
+    """Add bar spacing annotations to scene.
+
+    Args:
+        scene: Scene dictionary to modify
+        window: Window object
+    """
+    if not scene.get('_glass_coords'):
+        return
+
+    glass_coords = scene['_glass_coords']
+    glass_left = glass_coords['bottom_left'].x
+    glass_right = glass_coords['bottom_right'].x
+    glass_bottom = glass_coords['bottom_left'].y
+    glass_top = glass_coords['top_left'].y
+    glass_width = glass_right - glass_left
+    glass_height = glass_top - glass_bottom
+
+    # Vertical bar spacing annotations
+    if window.bars.vertical_bars > 0:
+        spacing = glass_width / (window.bars.vertical_bars + 1)
+        # Add annotation near first vertical bar
+        first_bar_x = glass_left + spacing
+        annotation_y = glass_bottom - 25  # Below glass
+
+        scene['layers'][LayerName.ANNOTATIONS].append({
+            'type': 'text',
+            'position': Point2D(first_bar_x, annotation_y),
+            'text': f"V-Bar spacing: {spacing:.1f} mm",
+            'height': 2.5,
+            'alignment': 'center'
+        })
+
+    # Horizontal bar spacing annotations
+    if window.bars.horizontal_bars > 0:
+        spacing = glass_height / (window.bars.horizontal_bars + 1)
+        # Add annotation near first horizontal bar
+        first_bar_y = glass_bottom + spacing
+        annotation_x = glass_right + 25  # To the right of glass
+
+        scene['layers'][LayerName.ANNOTATIONS].append({
+            'type': 'text',
+            'position': Point2D(annotation_x, first_bar_y),
+            'text': f"H-Bar: {spacing:.1f}",
+            'height': 2.5,
+            'alignment': 'left',
+            'rotation': 90
         })
 
 
