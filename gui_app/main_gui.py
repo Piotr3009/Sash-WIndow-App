@@ -6,7 +6,7 @@ import uuid
 from pathlib import Path
 from typing import Dict, Tuple
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QThreadPool
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QApplication,
@@ -36,6 +36,9 @@ try:
     from .graphics.export_dxf import DXFExporter
     from .graphics.export_svg import SVGExporter
     from .graphics.export_png import PNGExporter
+    from .graphics.scene import build_scene
+    from .graphics.workers import ExportWorker, PreviewWorker
+    from .graphics.preview import is_preview_available
     GRAPHICS_AVAILABLE = True
 except ImportError:
     GRAPHICS_AVAILABLE = False
@@ -57,13 +60,16 @@ class MainWindow(QMainWindow):
 
         # Graphics exporters
         if GRAPHICS_AVAILABLE:
-            self._dxf_exporter = DXFExporter()
-            self._svg_exporter = SVGExporter()
+            self._dxf_exporter = DXFExporter(output_dir="output/cad")
+            self._svg_exporter = SVGExporter(output_dir="output/cad")
             self._png_exporter = PNGExporter()
+            self._thread_pool = QThreadPool.globalInstance()
+            self._thread_pool.setMaxThreadCount(4)  # Allow up to 4 concurrent exports
         else:
             self._dxf_exporter = None
             self._svg_exporter = None
             self._png_exporter = None
+            self._thread_pool = None
 
         self._build_ui()
         self._apply_stylesheet()
@@ -523,52 +529,78 @@ class MainWindow(QMainWindow):
             self.graphics_viewer.zoom_out()
 
     def on_export_dxf(self) -> None:
-        """Export to DXF format."""
+        """Export to DXF format using threaded worker."""
         if not self._current_window or not self._dxf_exporter:
             QMessageBox.warning(self, "No Data", "Please run a calculation first.")
             return
 
-        self._toggle_progress(True)
-        self.graphics_status_label.setText("Exporting DXF…")
-        QApplication.processEvents()
+        # Build scene from current window
         try:
-            self._dxf_exporter._add_metadata(
-                project_name=self._project.name if self._project else "N/A",
-                client_name=self._project.client_name if self._project else "N/A"
-            )
-            dxf_path = self._dxf_exporter.export_window(self._current_window)
-            self.append_log(f"✅ DXF Exported: {dxf_path}")
-            self.graphics_status_label.setText(f"✅ DXF: {dxf_path}")
+            scene = build_scene(self._current_window, include_dimensions=True)
         except Exception as exc:
-            self.append_log(f"❌ DXF export failed: {exc}")
-            self.graphics_status_label.setText("❌ DXF export failed")
-            QMessageBox.critical(self, "DXF Error", str(exc))
-        finally:
-            self._toggle_progress(False)
+            self.append_log(f"❌ Scene building failed: {exc}")
+            QMessageBox.critical(self, "Scene Error", str(exc))
+            return
+
+        # Add metadata to exporter
+        self._dxf_exporter._add_metadata(
+            project_name=self._project.name if self._project else "N/A",
+            client_name=self._project.client_name if self._project else "N/A"
+        )
+
+        # Create and configure worker
+        worker = ExportWorker(
+            self._dxf_exporter.export_from_scene,
+            scene,
+            output_path=None
+        )
+        worker.signals.started.connect(lambda: self._on_export_started("DXF"))
+        worker.signals.progress.connect(self._on_export_progress)
+        worker.signals.finished.connect(self._on_dxf_export_finished)
+        worker.signals.error.connect(self._on_export_error)
+
+        # Start worker in thread pool
+        self._thread_pool.start(worker)
+        self._toggle_progress(True)
+        self.graphics_status_label.setText("Exporting DXF in background…")
+        self.append_log("DXF export started…")
 
     def on_export_svg(self) -> None:
-        """Export to SVG format."""
+        """Export to SVG format using threaded worker."""
         if not self._current_window or not self._svg_exporter:
             QMessageBox.warning(self, "No Data", "Please run a calculation first.")
             return
 
-        self._toggle_progress(True)
-        self.graphics_status_label.setText("Exporting SVG…")
-        QApplication.processEvents()
+        # Build scene from current window
         try:
-            self._svg_exporter._add_metadata(
-                project_name=self._project.name if self._project else "N/A",
-                client_name=self._project.client_name if self._project else "N/A"
-            )
-            svg_path = self._svg_exporter.export_window(self._current_window)
-            self.append_log(f"✅ SVG Exported: {svg_path}")
-            self.graphics_status_label.setText(f"✅ SVG: {svg_path}")
+            scene = build_scene(self._current_window, include_dimensions=True)
         except Exception as exc:
-            self.append_log(f"❌ SVG export failed: {exc}")
-            self.graphics_status_label.setText("❌ SVG export failed")
-            QMessageBox.critical(self, "SVG Error", str(exc))
-        finally:
-            self._toggle_progress(False)
+            self.append_log(f"❌ Scene building failed: {exc}")
+            QMessageBox.critical(self, "Scene Error", str(exc))
+            return
+
+        # Add metadata to exporter
+        self._svg_exporter._add_metadata(
+            project_name=self._project.name if self._project else "N/A",
+            client_name=self._project.client_name if self._project else "N/A"
+        )
+
+        # Create and configure worker
+        worker = ExportWorker(
+            self._svg_exporter.export_from_scene,
+            scene,
+            output_path=None
+        )
+        worker.signals.started.connect(lambda: self._on_export_started("SVG"))
+        worker.signals.progress.connect(self._on_export_progress)
+        worker.signals.finished.connect(self._on_svg_export_finished)
+        worker.signals.error.connect(self._on_export_error)
+
+        # Start worker in thread pool
+        self._thread_pool.start(worker)
+        self._toggle_progress(True)
+        self.graphics_status_label.setText("Exporting SVG in background…")
+        self.append_log("SVG export started…")
 
     def on_export_png_graphics(self) -> None:
         """Export to PNG format."""
@@ -593,6 +625,118 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "PNG Error", str(exc))
         finally:
             self._toggle_progress(False)
+
+    # ------------------------------------------------------------------
+    # Threaded export callbacks
+    # ------------------------------------------------------------------
+    def _on_export_started(self, export_type: str) -> None:
+        """Called when export worker starts.
+
+        Args:
+            export_type: Type of export (DXF, SVG, etc.)
+        """
+        self.append_log(f"{export_type} export worker started")
+
+    def _on_export_progress(self, value: int) -> None:
+        """Called when export worker reports progress.
+
+        Args:
+            value: Progress value (0-100)
+        """
+        self.progress_bar.setValue(value)
+        self.progress_bar.setRange(0, 100)
+
+    def _on_dxf_export_finished(self, file_path: str) -> None:
+        """Called when DXF export worker completes successfully.
+
+        Args:
+            file_path: Path to exported DXF file
+        """
+        self._toggle_progress(False)
+        self.append_log(f"✅ DXF Exported: {file_path}")
+        self.graphics_status_label.setText(f"✅ DXF: {Path(file_path).name}")
+        QMessageBox.information(
+            self,
+            "Export Complete",
+            f"DXF file saved to:\n{file_path}"
+        )
+
+    def _on_svg_export_finished(self, file_path: str) -> None:
+        """Called when SVG export worker completes successfully.
+
+        Args:
+            file_path: Path to exported SVG file
+        """
+        self._toggle_progress(False)
+        self.append_log(f"✅ SVG Exported: {file_path}")
+        self.graphics_status_label.setText(f"✅ SVG: {Path(file_path).name}")
+
+        # Auto-generate preview if available
+        if is_preview_available():
+            self._generate_svg_preview(file_path)
+        else:
+            QMessageBox.information(
+                self,
+                "Export Complete",
+                f"SVG file saved to:\n{file_path}\n\n"
+                "Install cairosvg for preview support:\n"
+                "pip install cairosvg"
+            )
+
+    def _on_export_error(self, error_msg: str) -> None:
+        """Called when export worker encounters an error.
+
+        Args:
+            error_msg: Error message
+        """
+        self._toggle_progress(False)
+        self.append_log(f"❌ Export failed: {error_msg}")
+        self.graphics_status_label.setText("❌ Export failed")
+        QMessageBox.critical(
+            self,
+            "Export Error",
+            f"Export failed:\n{error_msg}"
+        )
+
+    def _generate_svg_preview(self, svg_path: str) -> None:
+        """Generate PNG preview from SVG file using worker.
+
+        Args:
+            svg_path: Path to SVG file
+        """
+        png_path = str(Path(svg_path).with_suffix('.png'))
+
+        # Create preview worker
+        worker = PreviewWorker(
+            svg_path,
+            png_path,
+            width=800,
+            height=None,  # Auto-calculate from SVG
+            dpi=150
+        )
+        worker.signals.started.connect(
+            lambda: self.append_log("Generating SVG preview…")
+        )
+        worker.signals.finished.connect(self._on_preview_finished)
+        worker.signals.error.connect(
+            lambda msg: self.append_log(f"⚠ Preview failed: {msg}")
+        )
+
+        # Start worker
+        self._thread_pool.start(worker)
+
+    def _on_preview_finished(self, png_path: str) -> None:
+        """Called when preview generation completes.
+
+        Args:
+            png_path: Path to generated PNG preview
+        """
+        self.append_log(f"✅ Preview generated: {png_path}")
+        QMessageBox.information(
+            self,
+            "Export Complete",
+            f"SVG and preview saved:\n{png_path}"
+        )
 
 
 def main() -> None:
