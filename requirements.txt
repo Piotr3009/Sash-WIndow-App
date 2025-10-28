@@ -1,0 +1,17 @@
+# Core GUI Framework
+PyQt6>=6.7.0
+
+# Data Processing
+openpyxl>=3.1.0
+
+# PDF Generation
+reportlab>=4.0.0
+
+# Plotting and Drawing
+matplotlib>=3.9.0
+
+# Database (Optional - for Supabase integration)
+supabase>=2.0.0
+
+# Python Version Requirement
+# Requires Python 3.10+
