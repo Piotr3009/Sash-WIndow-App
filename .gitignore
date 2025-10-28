@@ -43,13 +43,19 @@ venv.bak/
 .env
 .env.local
 
-# Output Files
+# Output Files - Main Output Directory
 output/
 *.pdf
 *.xlsx
+
+# Output Files - CAD and Graphics (NEW)
+output/cad/
+output/preview/
+*.dxf
+*.svg
+
+# Legacy matplotlib drawings
 *.png
-*.jpg
-*.jpeg
 
 # Logs
 *.log
