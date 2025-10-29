@@ -12,12 +12,15 @@ import warnings
 
 
 # Try to import cairosvg
+CAIROSVG_AVAILABLE = False
+cairosvg = None
+
 try:
+    import cairocffi
     import cairosvg
     CAIROSVG_AVAILABLE = True
-except ImportError:
-    CAIROSVG_AVAILABLE = False
-    cairosvg = None
+except (ImportError, OSError):
+    pass
 
 
 def is_preview_available() -> bool:
