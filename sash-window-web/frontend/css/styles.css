@@ -1,0 +1,65 @@
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(203 213 225);
+  padding: 0.6rem 0.9rem;
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input:focus {
+  outline: none;
+  border-color: rgb(37 99 235);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+}
+
+.label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: rgb(100 116 139);
+  margin-bottom: 0.35rem;
+}
+
+.tab-button {
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding-bottom: 0.4rem;
+  border-bottom: 2px solid transparent;
+  color: rgb(148 163 184);
+  transition: all 0.2s ease;
+}
+
+.tab-button:hover,
+.tab-button.active {
+  color: rgb(37 99 235);
+  border-color: rgb(37 99 235);
+}
+
+.tab-panel {
+  min-height: 420px;
+}
+
+.toast-show {
+  display: block !important;
+  animation: fade-in 0.3s ease forwards;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
