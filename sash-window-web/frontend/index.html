@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Skylon Elements – Sash Window Designer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/@panzoom/panzoom/dist/panzoom.min.js"></script>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body class="bg-slate-100 text-slate-900 min-h-screen">
+    <header class="bg-white shadow-sm">
+      <div class="mx-auto max-w-7xl px-6 py-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 class="text-2xl font-semibold">Skylon Elements – Sash Window Designer</h1>
+          <p class="text-sm text-slate-500">Profesjonalny konfigurator okien skrzyniowych online.</p>
+        </div>
+        <div class="flex gap-3">
+          <a href="#results" class="text-sm font-medium text-blue-600 hover:underline">Wyniki</a>
+          <a href="#exports" class="text-sm font-medium text-blue-600 hover:underline">Eksporty</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-4 py-6">
+      <div class="grid gap-6 lg:grid-cols-[380px_minmax(0,1fr)]">
+        <section class="bg-white shadow rounded-xl p-5" id="configuration">
+          <form id="window-form" class="space-y-6">
+            <div>
+              <h2 class="text-lg font-semibold text-slate-800">Informacje o projekcie</h2>
+              <div class="mt-3 grid grid-cols-1 gap-4">
+                <label class="block text-sm font-medium text-slate-600" for="project-name">Nazwa projektu</label>
+                <input id="project-name" name="projectName" type="text" class="input" placeholder="Sash Residence" required />
+                <label class="block text-sm font-medium text-slate-600" for="client-name">Klient</label>
+                <input id="client-name" name="clientName" type="text" class="input" placeholder="Jan Kowalski" required />
+                <label class="block text-sm font-medium text-slate-600" for="window-name">Nazwa okna</label>
+                <input id="window-name" name="windowName" type="text" class="input" placeholder="Salon" value="Living Room" required />
+              </div>
+            </div>
+
+            <div>
+              <h2 class="text-lg font-semibold text-slate-800">Wymiary ramy</h2>
+              <div class="mt-3 grid grid-cols-2 gap-4">
+                <div>
+                  <label for="frame-width" class="label">Szerokość ramy (mm)</label>
+                  <input id="frame-width" name="frameWidth" type="number" min="400" max="4000" step="1" class="input" value="1200" required />
+                </div>
+                <div>
+                  <label for="frame-height" class="label">Wysokość ramy (mm)</label>
+                  <input id="frame-height" name="frameHeight" type="number" min="400" max="4000" step="1" class="input" value="1600" required />
+                </div>
+                <div>
+                  <label for="top-sash-height" class="label">Wysokość górnej ramy (mm)</label>
+                  <input id="top-sash-height" name="topSashHeight" type="number" min="200" max="3000" step="1" class="input" value="780" required />
+                </div>
+                <div>
+                  <label for="bottom-sash-height" class="label">Wysokość dolnej ramy (mm)</label>
+                  <input id="bottom-sash-height" name="bottomSashHeight" type="number" min="200" max="3000" step="1" class="input" value="780" required />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 class="text-lg font-semibold text-slate-800">Wykończenie</h2>
+              <div class="mt-3 grid grid-cols-1 gap-4">
+                <div>
+                  <label class="label" for="paint-color">Kolor lakieru</label>
+                  <input id="paint-color" name="paintColor" type="text" class="input" value="White" />
+                </div>
+                <div>
+                  <label class="label" for="hardware-finish">Wykończenie okuć</label>
+                  <input id="hardware-finish" name="hardwareFinish" type="text" class="input" value="Satin Chrome" />
+                </div>
+                <div>
+                  <label class="label" for="trickle-vent">Nawiewniki</label>
+                  <input id="trickle-vent" name="trickleVent" type="text" class="input" value="Concealed" />
+                </div>
+                <div>
+                  <label class="label" for="sash-catches">Zamki skrzydeł</label>
+                  <input id="sash-catches" name="sashCatches" type="text" class="input" value="Polished Brass" />
+                </div>
+                <div>
+                  <label class="label" for="cill-extension">Przedłużenie parapetu (mm)</label>
+                  <input id="cill-extension" name="cillExtension" type="number" min="0" max="500" class="input" value="60" />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 class="text-lg font-semibold text-slate-800">Szklenie</h2>
+              <div class="mt-3 grid grid-cols-1 gap-4">
+                <div>
+                  <label class="label" for="glass-type">Typ pakietu</label>
+                  <input id="glass-type" name="glassType" type="text" class="input" value="24mm TGH/ARG/TGH" />
+                </div>
+                <div class="flex items-center gap-3">
+                  <input id="glass-frosted" name="glassFrosted" type="checkbox" class="h-4 w-4" />
+                  <label for="glass-frosted" class="text-sm text-slate-600">Szkło matowe</label>
+                </div>
+                <div class="flex items-center gap-3">
+                  <input id="glass-toughened" name="glassToughened" type="checkbox" class="h-4 w-4" checked />
+                  <label for="glass-toughened" class="text-sm text-slate-600">Szkło hartowane</label>
+                </div>
+                <div>
+                  <label class="label" for="spacer-color">Kolor ramki dystansowej</label>
+                  <input id="spacer-color" name="spacerColor" type="text" class="input" value="Black" />
+                </div>
+                <div>
+                  <label class="label" for="glass-pcs">Ilość pakietów</label>
+                  <input id="glass-pcs" name="glassPcs" type="number" min="1" max="4" class="input" value="2" />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 class="text-lg font-semibold text-slate-800">Szczebliny</h2>
+              <div class="mt-3 grid grid-cols-1 gap-4">
+                <div>
+                  <label class="label" for="bars-layout">Układ listew</label>
+                  <input id="bars-layout" name="barsLayout" type="text" class="input" value="3x3" />
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="label" for="bars-vertical">Pionowe</label>
+                    <input id="bars-vertical" name="barsVertical" type="number" min="0" max="6" class="input" value="3" />
+                  </div>
+                  <div>
+                    <label class="label" for="bars-horizontal">Poziome</label>
+                    <input id="bars-horizontal" name="barsHorizontal" type="number" min="0" max="6" class="input" value="3" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h2 class="text-lg font-semibold text-slate-800">Opcje materiałowe</h2>
+              <div class="mt-3">
+                <label class="label" for="wood-type">Drewno</label>
+                <input id="wood-type" name="woodType" type="text" class="input" value="Sapele" />
+              </div>
+            </div>
+
+            <button type="submit" class="w-full rounded-lg bg-blue-600 py-2.5 text-white font-medium hover:bg-blue-700 transition">Przelicz projekt</button>
+          </form>
+        </section>
+
+        <section class="bg-white shadow rounded-xl p-5 flex flex-col" id="visualisation">
+          <div class="flex items-center justify-between border-b pb-3">
+            <div class="flex gap-4" role="tablist">
+              <button class="tab-button active" data-target="graphics">Grafika</button>
+              <button class="tab-button" data-target="results">Wyniki</button>
+              <button class="tab-button" data-target="exports">Eksporty</button>
+            </div>
+            <div class="flex gap-2 text-sm text-slate-500">
+              <button id="zoom-in" class="rounded border px-2 py-1 hover:bg-slate-100">+</button>
+              <button id="zoom-out" class="rounded border px-2 py-1 hover:bg-slate-100">−</button>
+              <button id="zoom-reset" class="rounded border px-2 py-1 hover:bg-slate-100">Dopasuj</button>
+            </div>
+          </div>
+
+          <div class="tab-panel flex-1 flex flex-col" id="panel-graphics">
+            <div id="viewer" class="relative flex-1 overflow-hidden bg-slate-50 border rounded-lg mt-4">
+              <svg id="preview-canvas" class="w-full h-full" viewBox="0 0 1200 1600"></svg>
+              <div id="viewer-empty" class="absolute inset-0 flex items-center justify-center text-slate-400 text-sm">
+                Uzupełnij formularz i kliknij „Przelicz projekt”.
+              </div>
+            </div>
+          </div>
+
+          <div class="tab-panel hidden flex-1 overflow-y-auto" id="panel-results">
+            <div class="mt-4 space-y-6 text-sm" id="results"></div>
+          </div>
+
+          <div class="tab-panel hidden flex-1 overflow-y-auto" id="panel-exports">
+            <div class="mt-4 space-y-4" id="exports"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="toast" class="fixed bottom-6 right-6 hidden rounded-lg bg-slate-900/90 px-4 py-3 text-white shadow-lg"></div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
